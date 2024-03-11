@@ -14,6 +14,8 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 import tqdm
 from utils.factory import create_model_and_transforms, get_tokenizer
+from utils.generatelist import generate_classlist_and_labels
+
 
 
 def get_args_parser():
@@ -32,6 +34,7 @@ def get_args_parser():
                         help='path where to save')
     parser.add_argument('--device', default='cuda:0',
                         help='device to use for testing')
+    parser.add_argument('--dataset_path')
     return parser
 
 
@@ -62,12 +65,13 @@ def get_text_features(model, tokenizer, lines,
     with torch.no_grad(), autocast():
         zeroshot_weights = []
         for i in tqdm.trange(0, len(lines), batch_size):
+            import pdb; pdb.set_trace()
             texts = lines[i:i+batch_size]
             texts = tokenizer(texts).to(device)  # tokenize
             class_embeddings = model.encode_text(texts)
             class_embeddings = F.normalize(class_embeddings, dim=-1)
             zeroshot_weights.append(class_embeddings.detach().cpu())
-        zeroshot_weights = torch.concatenate(zeroshot_weights, dim=0)
+        zeroshot_weights = torch.cat(zeroshot_weights, dim=0)
     return zeroshot_weights
 
 
@@ -83,11 +87,17 @@ def main(args):
     print("Model parameters:", f"{np.sum([int(np.prod(p.shape)) for p in model.parameters()]):,}")
     print("Context length:", context_length)
     print("Vocab size:", vocab_size)
-    with open(args.data_path, 'r') as f:
-        lines = f.readlines()
-    base, name = os.path.split(args.data_path)
-    name = name.replace('.txt', '')
-    features = get_text_features(model, tokenizer, lines, args.device, args.batch_size)
+    if args.dataset_path is None:
+        with open(args.data_path, 'r') as f:
+            lines = f.readlines()
+        base, name = os.path.split(args.data_path)
+        name = name.replace('.txt', '')
+        features = get_text_features(model, tokenizer, lines, args.device, args.batch_size)
+    else:
+        _, _, class_name = generate_classlist_and_labels(args.dataset_path)
+        name = os.path.split(args.dataset_path)[-1]
+        features = get_text_features(model, tokenizer, class_name, args.device, args.batch_size)
+    import pdb; pdb.set_trace()
     with open(os.path.join(args.output_dir, f'{name}_{args.model}.npy'), 'wb') as f:
         np.save(f, features.numpy())
     

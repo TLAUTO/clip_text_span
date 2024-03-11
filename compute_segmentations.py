@@ -30,7 +30,7 @@ def get_args_parser():
     parser.add_argument('--image_size', default=224, type=int, help='Image size')
     parser.add_argument('--thr', type=float, default=0.,
                         help='threshold')
-    parser.add_argument('--data_path', default='imagenet_seg/gtsegs_ijcv.mat', type=str,
+    parser.add_argument('--data_path', default='imagenet_seg/imagenet_seg /gtsegs_ijcv.mat', type=str,
                             help='dataset path')
     parser.add_argument('--num_workers', default=10, type=int)
     parser.add_argument('--classifier_dir', default='./output_dir/')
@@ -183,7 +183,7 @@ def main(args):
     # Eval in loop
     total_inter, total_union, total_correct, total_label = np.int64(0), np.int64(0), np.int64(0), np.int64(0)
     total_ap = []
-
+    import pdb; pdb.set_trace()
     predictions, targets = [], []
     for batch_idx, (image, labels) in enumerate(iterator):
 

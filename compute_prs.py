@@ -12,6 +12,7 @@ from utils.factory import create_model_and_transforms, get_tokenizer
 from utils.binary_waterbirds import BinaryWaterbirds
 from prs_hook import hook_prs_logger
 from torchvision.datasets import CIFAR100, CIFAR10
+from utils.generatelist import generate_classlist_and_labels
 
 
 def get_args_parser():
@@ -61,6 +62,8 @@ def main(args):
         ds = CIFAR10(root=args.data_path, download=True, train=False, transform=preprocess)
     else:
         ds = ImageFolder(root=args.data_path, transform=preprocess)
+
+
     dataloader = DataLoader(ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     
     attention_results = []
@@ -72,8 +75,11 @@ def main(args):
             representation = model.encode_image(image.to(args.device), 
                                                 attn_method='head', 
                                                 normalize=False)
+            import pdb;pdb.set_trace()
             attentions, mlps = prs.finalize(representation)
             attentions = attentions.detach().cpu().numpy() # [b, l, n, h, d]
+            ##可改
+            import pdb;pdb.set_trace()
             mlps = mlps.detach().cpu().numpy() # [b, l+1, d]
             attention_results.append(np.sum(attentions, axis=2)) # Reduce the spatial dimension 
             mlp_results.append(mlps)

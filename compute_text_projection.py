@@ -17,6 +17,7 @@ from utils.factory import create_model_and_transforms, get_tokenizer
 from utils.openai_templates import OPENAI_IMAGENET_TEMPLATES
 from utils.imagenet_classes import imagenet_classes
 from utils.cub_classes import cub_classes, waterbird_classes
+from utils.generatelist import generate_classlist_and_labels
 
 
 def get_args_parser():
@@ -27,10 +28,12 @@ def get_args_parser():
     parser.add_argument('--dataset', default='imagenet', help='waterbirds or imagenet')
     parser.add_argument('--pretrained', default='laion2b_s32b_b79k', type=str)
     # Dataset parameters
+    parser.add_argument('--input_dir')
     parser.add_argument('--output_dir', default='./output_dir',
                         help='path where to save')
     parser.add_argument('--device', default='cuda:0',
                         help='device to use for testing')
+    parser.add_argument('--dataset_name')
     return parser
 
 
@@ -70,7 +73,7 @@ def zero_shot_classifier(model, tokenizer, classnames, templates,
             class_embedding = F.normalize(class_embeddings, dim=-1).mean(dim=0)
             class_embedding /= class_embedding.norm()
             zeroshot_weights.append(class_embedding)
-        zeroshot_weights = torch.stack(zeroshot_weights, dim=1).to(device)
+        zeroshot_weights = torch.stack(zeroshot_weights, dim=1).to(device)  
     return zeroshot_weights
 
 
@@ -90,9 +93,20 @@ def main(args):
         'imagenet': imagenet_classes, 
         'waterbirds': cub_classes, 
         'binary_waterbirds': waterbird_classes, 
+        'cub': cub_classes}
+    if args.dataset in classes:
+        classes = {
+        'imagenet': imagenet_classes, 
+        'waterbirds': cub_classes, 
+        'binary_waterbirds': waterbird_classes, 
         'cub': cub_classes}[args.dataset]
-    classifier = zero_shot_classifier(model, tokenizer, classes, OPENAI_IMAGENET_TEMPLATES, args.device)
-    with open(os.path.join(args.output_dir, f'{args.dataset}_classifier_{args.model}.npy'), 'wb') as f:
+        classifier = zero_shot_classifier(model, tokenizer, classes, OPENAI_IMAGENET_TEMPLATES, args.device)
+    else:
+        import pdb; pdb.set_trace()
+        classes, labels, class_name = generate_classlist_and_labels(args.input_dir)
+        
+        classifier = zero_shot_classifier(model, tokenizer, classes, OPENAI_IMAGENET_TEMPLATES, args.device)
+    with open(os.path.join(args.output_dir, f'{args.dataset_name}_classifier_{args.model}.npy'), 'wb') as f:
         np.save(f, classifier.detach().cpu().numpy())
     
 

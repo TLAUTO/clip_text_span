@@ -4,9 +4,10 @@ import os.path
 import argparse
 import einops
 from pathlib import Path
-
+import pandas as pd
 import tqdm
 from utils.misc import accuracy
+from utils.generatelist import generate_classlist_and_labels
 
 
 def get_args_parser():
@@ -17,11 +18,12 @@ def get_args_parser():
                         help='Name of model to use')
     # Dataset parameters
     parser.add_argument('--num_workers', default=10, type=int)
+    parser.add_argument('--dataset_dir')
     parser.add_argument('--figures_dir', default='./output_dir',
                         help='path where data is saved')
     parser.add_argument('--input_dir', default='./output_dir',
                         help='path where data is saved')
-    parser.add_argument('--dataset', type=str, default='imagenet', 
+    parser.add_argument('--dataset', type=str, default='waterbirds', 
                         help='imagenet, waterbirds, cub, binary_waterbirds')
     return parser
     
@@ -31,13 +33,29 @@ def main(args):
         attns = np.load(f) # [b, l, h, d]
     with open(os.path.join(args.input_dir, f'{args.dataset}_mlp_{args.model}.npy'), 'rb') as f:
         mlps = np.load(f) # [b, l+1, d]
-    with open(os.path.join(args.input_dir, f'{args.dataset}_classifier_{args.model}.npy'), 'rb') as f:
+    with open(os.path.join(args.input_dir, f'office31_classifier_{args.model}.npy'), 'rb') as f:
         classifier = np.load(f)
     if args.dataset == 'imagenet':
         labels = np.array([i // 50 for i in range(attns.shape[0])])
     else:
-        with open(os.path.join(args.input_dir, f'{args.dataset}_labels.npy'), 'rb') as f:
-            labels = np.load(f)
+        # with open(os.path.join(args.input_dir, f'{args.dataset}_labels.npy'), 'rb') as f:
+    #    with open(os.path.join('waterbird_complete95_forest2water2', 'metadata.csv'), 'rb') as f:
+            # labels = np.load(f)
+    #        df = pd.read_csv(f)
+    #        labels = df.iloc[:, 2].values
+    #       print(len(labels))
+    #        labels = np.array(labels)
+        '''with open(os.path.join('waterbird_complete95_forest2water2', 'metadata.csv'), 'rb') as f:
+                # labels = np.load(f)
+                import pdb; pdb.set_trace() 
+                df = pd.read_csv(f)
+                labels = df.iloc[:, 1].values
+                # 使用列表推导将每个元素的前三个字符转换为整数
+                int_labels_array = np.array([int(label[:3]) for label in labels])
+                # 输出转换后的数组
+                labels = np.array(int_labels_array)-1 '''
+        _, labels = generate_classlist_and_labels(args.dataset_dir)
+        labels = np.array(labels)
     baseline = attns.sum(axis=(1,2)) + mlps.sum(axis=1)
     baseline_acc = accuracy(torch.from_numpy(baseline @ classifier).float(), 
                             torch.from_numpy(labels))[0]*100

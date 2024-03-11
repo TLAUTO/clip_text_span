@@ -11,6 +11,8 @@ import tqdm
 import argparse
 from torchvision.datasets import ImageNet
 from pathlib import Path
+import pandas as pd
+from utils.generatelist import generate_classlist_and_labels
 
 from utils.misc import accuracy
 
@@ -58,8 +60,9 @@ def get_args_parser():
                         help='name of the evalauted text set')
     parser.add_argument('--text_dir', default='./text_descriptions', type=str, 
                         help='The folder with the text files')
-    parser.add_argument('--dataset', type=str, default='imagenet', 
+    parser.add_argument('--dataset', type=str, default='waterbirds', 
                         help='imagenet or waterbirds')
+    parser.add_argument('--dataset_dir')
     parser.add_argument('--num_of_last_layers', type=int, default=8, 
                         help="How many attention layers to replace.")
     parser.add_argument('--w_ov_rank', type=int, default=80, help='The rank of the OV matrix')
@@ -70,11 +73,22 @@ def get_args_parser():
 
 
 def main(args):
+    if args.model == 'ViT-H-14':
+        to_mean_ablate_setting = [(31, 12),  (30, 11), (29, 4)]
+        to_mean_ablate_geo = [(31, 8), (30,15), (30, 12 ), (30, 6), (29, 14), (29, 8)]
+    elif args.model == 'ViT-L-14':
+        to_mean_ablate_geo = [(21, 1), (22, 12), (22,13), (21, 11), (21, 14), (23,6), (20,1), (20,11)]
+        to_mean_ablate_setting = [(21,3), (21, 6), (21, 8), (21,13), (22, 2), (22, 12), (22, 15), (23, 1), (23, 3), (23, 5), (20,2), (20,4), (20,5), (20,10),(20,12)]
+    else: 
+        assert args.model == 'ViT-B-16'
+        to_mean_ablate_setting = [(11, 3), (10, 11), (10, 10), (9, 8), (9, 6)]
+        to_mean_ablate_geo = [(11, 6), (11, 0)]
+    to_mean_ablate_output = to_mean_ablate_geo
     with open(os.path.join(args.input_dir, f'{args.dataset}_attn_{args.model}.npy'), 'rb') as f:
         attns = np.load(f) # [b, l, h, d]
     with open(os.path.join(args.input_dir, f'{args.dataset}_mlp_{args.model}.npy'), 'rb') as f:
         mlps = np.load(f) # [b, l+1, d]
-    with open(os.path.join(args.input_dir, f'{args.dataset}_classifier_{args.model}.npy'), 'rb') as f:
+    with open(os.path.join(args.input_dir, f'office31_classifier_{args.model}.npy'), 'rb') as f: # 对于office31的classifier
         classifier = np.load(f)
     print(f'Number of layers: {attns.shape[1]}')
     all_images = set()
@@ -90,19 +104,45 @@ def main(args):
     with open(os.path.join(args.output_dir, f'{args.dataset}_completeness_{args.text_descriptions}_top_{args.texts_per_head}_heads_{args.model}.txt'), 'w') as w:
         for i in tqdm.trange(attns.shape[1] - args.num_of_last_layers, attns.shape[1]):
             for head in range(attns.shape[2]):
-                results, images = replace_with_iterative_removal(attns[:, i, head], 
-                                                                 text_features, lines, args.texts_per_head, args.w_ov_rank, args.device)
+                results, images = replace_with_iterative_removal(attns[:, i, head], text_features, lines, args.texts_per_head, args.w_ov_rank, args.device)
                 attns[:, i, head] = results
                 all_images |= set(images)
                 w.write(f'------------------\n')
                 w.write(f'Layer {i}, Head {head}\n')
                 w.write(f'------------------\n')
                 for text in images:
-                    w.write(f'{text}\n')
-                    
+                    w.write(f'{text}\n')        
+        for layer, head in to_mean_ablate_output:
+            attns[:, layer, head, :] = np.mean(attns[:, layer, head, :], axis=0, keepdims=True)
+        for layer in range(attns.shape[1]-4):
+            for head in range(attns.shape[2]):
+                attns[:, layer, head, :] = np.mean(attns[:, layer, head, :], axis=0, keepdims=True)
+        for layer in range(mlps.shape[1]):
+            mlps[:, layer] = np.mean(mlps[:, layer], axis=0, keepdims=True) 
+        #mlps_mean = einops.repeat(mlps.mean(axis=0), 'l d -> b l d', b=attns.shape[0])                     
         mean_ablated_and_replaced = mlps.sum(axis=1) + attns.sum(axis=(1, 2))
         projections = torch.from_numpy(mean_ablated_and_replaced).float().to(args.device) @ torch.from_numpy(classifier).float().to(args.device)
-        labels = np.array([i // 50 for i in range(attns.shape[0])])
+        if args.dataset == 'imagenet':
+            labels = np.array([i // 50 for i in range(attns.shape[0])])
+        else:
+             # with open(os.path.join(args.input_dir, f'{args.dataset}_labels.npy'), 'rb') as f:
+            '''with open(os.path.join('waterbird_complete95_forest2water2', 'metadata.csv'), 'rb') as f:
+                # labels = np.load(f)
+                df = pd.read_csv(f)
+                labels = df.iloc[:, 1].values
+                # 使用列表推导将每个元素的前三个字符转换为整数
+                int_labels_array = np.array([int(label[:3]) for label in labels])
+                # 输出转换后的数组
+                labels = np.array(int_labels_array)-1'''
+            '''with open(os.path.join('waterbird_complete95_forest2water2', 'metadata.csv'), 'rb') as f:
+                df = pd.read_csv(f)
+                import pdb;pdb.set_trace()
+                labels = df.iloc[:, 2].values
+                print(len(labels))
+                labels = np.array(labels)'''
+        _, labels = generate_classlist_and_labels(args.dataset_dir)
+        labels = np.array(labels)            
+
         current_accuracy = accuracy(projections.cpu(), torch.from_numpy(labels))[0] * 100.
         print(f'Current accuracy:', current_accuracy, '\nNumber of texts:', len(all_images))
         w.write(f'------------------\n')
