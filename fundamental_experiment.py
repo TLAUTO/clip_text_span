@@ -105,33 +105,32 @@ def main(args):
     print('Baseline:', baseline_acc)
     y1 = []
     y2 = []
+    base = []
     a = copy.deepcopy(mlps)
     b = copy.deepcopy(mlps)
-    for i in range(mlps.shape[1]):
+    for i in range( mlps.shape[1]):
         a[:, i] = np.mean(a[:, i], axis=0, keepdims=True)
         mlp_ablation = attns.sum(axis=(1,2)) + a.sum(axis=1)
         mlp_ablation_acc = accuracy(torch.from_numpy(mlp_ablation @ classifier).float(), 
                                 torch.from_numpy(labels))[0]*100
         y1.append(mlp_ablation_acc)
+        base.append(baseline_acc)
         print(f'mlp_ablation_in_first_{i}_layers:', mlp_ablation_acc)
-    plt.plot( y1, marker='o', linestyle='-',label='-')
-    plt.title(f'from_first_mlp_ablation_{args.dataset}')
-    plt.xlabel('mlp_ablation_num')
-    plt.ylabel('acc')
-    plt.savefig(f'from_first_mlp_ablation_{args.dataset}')
+    plt.plot( y1, marker='o', linestyle='-',label=f'from_first_mlp_ablation_{args.dataset}')
     for i in range(mlps.shape[1]):
-        import pdb;pdb.set_trace()
         b[:, 24-i] = np.mean(b[:, 24-i], axis=0, keepdims=True)
         mlp_ablation = attns.sum(axis=(1,2)) + b.sum(axis=1)
         mlp_ablation_acc = accuracy(torch.from_numpy(mlp_ablation @ classifier).float(), 
                                 torch.from_numpy(labels))[0]*100
         y2.append(mlp_ablation_acc)
     print(f'mlp_ablation_in_first_{i}_layers:', mlp_ablation_acc)
-    plt.plot( y2, marker='o', linestyle='-',label='-')
-    plt.title(f'from_last_mlp_ablation_{args.dataset}')
+    plt.plot( y2, marker='o', linestyle='-',label=f'from_last_mlp_ablation_{args.dataset}')
+    plt.plot( base, marker='o', linestyle='-',label='baseline')
+    plt.title(f'mlp_ablation_{args.dataset}')
     plt.xlabel('mlp_ablation_num')
     plt.ylabel('acc')
-    plt.savefig(f'from_last_mlp_ablation_{args.dataset}')
+    plt.legend()
+    plt.savefig(f'mlp_ablation_{args.dataset}')
     import pdb; pdb.set_trace()
     ran = copy.deepcopy(attns)
     for layer, head in random_ablation:
